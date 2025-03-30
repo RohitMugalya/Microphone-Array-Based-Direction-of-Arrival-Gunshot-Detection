@@ -1,28 +1,23 @@
 import os
 import numpy as np
 import librosa
-from tqdm import tqdm
 import soundfile as sf
+from tqdm import tqdm
 
 # --- Configuration ---
 SAMPLE_RATE = 44100
-DURATION = 1.0  # Seconds
 SNR_RANGE = (5, 20)  # Min and max SNR (dB)
 OUTPUT_DIR = "../data/synthetic_gunshots/"
 os.makedirs(OUTPUT_DIR, exist_ok=True)
 
-# --- Load Original Data ---
+# --- Load Original Data (Variable Length) ---
 def load_audio_files(folder_path):
-    """Load all .wav files from a folder and trim/pad to fixed duration."""
+    """Load all .wav files without enforcing fixed duration."""
     audio_files = []
     for file in os.listdir(folder_path):
         if file.endswith(".wav"):
             file_path = os.path.join(folder_path, file)
-            audio, _ = librosa.load(file_path, sr=SAMPLE_RATE, duration=DURATION)
-            if len(audio) < int(SAMPLE_RATE * DURATION):
-                audio = np.pad(audio, (0, int(SAMPLE_RATE * DURATION) - len(audio)))
-            else:
-                audio = audio[:int(SAMPLE_RATE * DURATION)]
+            audio, _ = librosa.load(file_path, sr=SAMPLE_RATE)
             audio_files.append(audio)
     return audio_files
 
@@ -35,6 +30,11 @@ def mix_gunshot_noise(gunshot, noise, snr_db):
     # Normalize both signals
     gunshot = gunshot / np.max(np.abs(gunshot))
     noise = noise / np.max(np.abs(noise))
+    
+    # Trim noise to match gunshot length
+    min_length = min(len(gunshot), len(noise))
+    gunshot = gunshot[:min_length]
+    noise = noise[:min_length]
     
     # Scale noise to achieve desired SNR
     gunshot_power = np.mean(gunshot ** 2)
@@ -60,3 +60,9 @@ for i, gunshot in enumerate(tqdm(gunshots, desc="Generating synthetic data")):
     sf.write(output_path, synthetic_audio, SAMPLE_RATE)
 
 print(f"Synthetic data saved to {OUTPUT_DIR}")
+
+# --- Verification ---
+print("\nExample synthetic audio shapes:")
+for i in range(min(3, len(gunshots))):
+    print(f"Original gunshot {i}: {len(gunshots[i])} samples")
+    print(f"Synthetic gunshot {i}: {len(synthetic_audio)} samples")
